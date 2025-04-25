@@ -1,39 +1,36 @@
-const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const express = require("express");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-app.get('/preview/:trackId', async (req, res) => {
+app.get("/preview/:trackId", async (req, res) => {
   const trackId = req.params.trackId;
   const embedUrl = `https://open.spotify.com/embed/track/${trackId}`;
 
   try {
-    const { data: html } = await axios.get(embedUrl);
+    const response = await axios.get(embedUrl);
+    const html = response.data;
     const $ = cheerio.load(html);
 
-    const scriptTag = $('script').filter((_, el) => {
-      return $(el).html().includes('audioPreview');
-    }).first();
+    const scriptTagContent = $('#__NEXT_DATA__').html();
+    if (!scriptTagContent) return res.status(404).json({ error: "Script tag not found" });
 
-    const scriptContent = scriptTag.html();
-    const match = scriptContent.match(/"audioPreview":"(https[^"]+)"/);
+    const json = JSON.parse(scriptTagContent);
 
-    if (match && match[1]) {
-      return res.json({ preview_url: match[1] });
+    // Safely navigate to audioPreview.url
+    const previewUrl = json?.props?.pageProps?.state?.data?.entity?.audioPreview?.url;
+
+    if (previewUrl) {
+      res.json({ preview_url: previewUrl });
+    } else {
+      res.status(404).json({ error: "No preview URL found for this track." });
     }
-
-    res.status(404).json({ error: 'Preview URL not found' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch preview URL', detail: error.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Spotify Preview API is running. Use /preview/:trackId to get a preview.');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
